@@ -146,13 +146,13 @@ static uint32_t _micros() { return to_us_since_boot(get_absolute_time()); }
 
 static void _spiTransaction(int cs, uint8_t d2, uint8_t d1, uint8_t d0,
                             uint8_t* r2, uint8_t* r1, uint8_t* r0) {
-  DEBUG(">>> %x %x %x %x\n", cs, d2, d1, d0);
+  DEBUG(">>> %d: %x %x %x\n", cs, d2, d1, d0);
   gpio_put(cs, 0);
   spi_write_read_blocking(spi0, &d2, r2, 1);
   spi_write_read_blocking(spi0, &d1, r1, 1);
   spi_write_read_blocking(spi0, &d0, r0, 1);
   gpio_put(cs, 1);
-  DEBUG("<<< %x %x %x %x\n", cs, *r2, *r1, *r0);
+  DEBUG("<<< %d: %x %x %x\n", cs, *r2, *r1, *r0);
 }
 
 // MAX22190 =======================
@@ -556,6 +556,11 @@ static void _ledCtrl(bool on) {
 // Public ==========================
 
 bool iono_init() {
+  gpio_init(IONO_PIN_CS_DOL);
+  gpio_init(IONO_PIN_CS_DOH);
+  gpio_init(IONO_PIN_CS_DIL);
+  gpio_init(IONO_PIN_CS_DIH);
+
   gpio_set_dir(IONO_PIN_CS_DOL, GPIO_OUT);
   gpio_set_dir(IONO_PIN_CS_DOH, GPIO_OUT);
   gpio_set_dir(IONO_PIN_CS_DIL, GPIO_OUT);
@@ -566,9 +571,11 @@ bool iono_init() {
   gpio_put(IONO_PIN_CS_DIL, 1);
   gpio_put(IONO_PIN_CS_DIH, 1);
 
+  gpio_init(IONO_PIN_MAX14912_WD_EN);
   gpio_set_dir(IONO_PIN_MAX14912_WD_EN, GPIO_OUT);
   gpio_put(IONO_PIN_MAX14912_WD_EN, 1);
 
+  gpio_init(IONO_PIN_RS485_TXEN_N);
   gpio_set_dir(IONO_PIN_RS485_TXEN_N, GPIO_OUT);
   iono_rs485_tx_en(false);
 
