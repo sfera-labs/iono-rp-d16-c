@@ -151,6 +151,7 @@ static void _spiTransaction(int cs, uint8_t d2, uint8_t d1, uint8_t d0,
   spi_write_read_blocking(spi0, &d2, r2, 1);
   spi_write_read_blocking(spi0, &d1, r1, 1);
   spi_write_read_blocking(spi0, &d0, r0, 1);
+  sleep_us(1);
   gpio_put(cs, 1);
   DEBUG("<<< %d: %x %x %x\n", cs, *r2, *r1, *r0);
 }
@@ -188,26 +189,30 @@ static bool _max22190SpiTransaction(struct max22190Str* m, uint8_t* data1,
                                     uint8_t* data0) {
   uint8_t r1, r0, rcrc;
   uint8_t crc = _max22190Crc(*data1, *data0, 0);
-  bool ok = false;
   for (int i = 0; i < 3; i++) {
+#ifdef IONO_DEBUG
+    if (i != 0) {
+      DEBUG("max22190 repeat\n");
+    }
+#endif
     mutex_enter_blocking(&_spiMtx);
     _spiTransaction(m->pinCs, *data1, *data0, crc, &r1, &r0, &rcrc);
     mutex_exit(&_spiMtx);
     if ((rcrc & 0x1f) == _max22190Crc(r1, r0, rcrc)) {
       *data1 = r1;
       *data0 = r0;
-      ok = true;
-      break;
+      return true;
     }
-    DEBUG("max22190 repeat\n");
   }
-  return ok;
+  DEBUG("max22190 i2c error\n");
+  return false;
 }
 
 static bool _max22190ReadReg(uint8_t regAddr, struct max22190Str* m,
                              uint8_t* data) {
   uint8_t data1 = regAddr;
   uint8_t data0 = 0;
+  DEBUG("max22190 %d read reg=%d\n", m->pinCs, regAddr);
   if (_max22190SpiTransaction(m, &data1, &data0)) {
     m->error = false;
     m->inputs = data1;
@@ -219,9 +224,17 @@ static bool _max22190ReadReg(uint8_t regAddr, struct max22190Str* m,
 }
 
 static bool _max22190WriteReg(uint8_t regAddr, struct max22190Str* m,
-                              uint8_t data0) {
+                              uint8_t val) {
   uint8_t data1 = 0x80 | regAddr;
-  return _max22190SpiTransaction(m, &data1, &data0);
+  uint8_t data0 = val;
+  DEBUG("max22190 %d write reg=%d val=0x%x\n", m->pinCs, regAddr, val);
+  if (!_max22190SpiTransaction(m, &data1, &data0)) {
+    return false;
+  }
+  if (!_max22190ReadReg(regAddr, m, &data0)) {
+    return false;
+  }
+  return data0 == val;
 }
 
 static bool _max22190GetByPin(int pin, struct max22190Str** m, int* inIdx) {
@@ -265,7 +278,6 @@ static bool _max14912SpiTransaction(bool wr, struct max14912Str* m,
   uint8_t r1, r0, rcrc;
   uint8_t zBit = m->clearFaults ? 0x80 : 0x00;
   uint8_t crc = _max14912Crc(zBit | *data1, *data0);
-  bool ok = false;
   for (int i = 0; i < 3; i++) {
 #ifdef IONO_DEBUG
     if (i != 0) {
@@ -276,7 +288,8 @@ static bool _max14912SpiTransaction(bool wr, struct max14912Str* m,
     _spiTransaction(m->pinCs, zBit | *data1, *data0, crc, &r1, &r0, &rcrc);
 #ifdef IONO_DEBUG
     if ((rcrc & 0x80) == 0x80) {
-      DEBUG("max14912 CRC err 1\n");
+      // CRC check of previous transaction
+      DEBUG("max14912 CRC prev err\n");
     }
 #endif
     if (wr) {
@@ -284,7 +297,7 @@ static bool _max14912SpiTransaction(bool wr, struct max14912Str* m,
                       _max14912ReadStatCrc, &r1, &r0, &rcrc);
       mutex_exit(&_spiMtx);
       if ((rcrc & 0x80) == 0x80) {
-        DEBUG("max14912 CRC err 2\n");
+        DEBUG("max14912 CRC err\n");
         continue;
       }
     } else {
@@ -293,20 +306,21 @@ static bool _max14912SpiTransaction(bool wr, struct max14912Str* m,
     if ((rcrc & 0x7f) == _max14912Crc(r1, r0)) {
       *data1 = r1;
       *data0 = r0;
-      ok = true;
-      break;
+      if (zBit == 0x80) {
+        m->clearFaults = false;
+      }
+      return true;
     }
   }
-  if (ok && zBit == 0x80) {
-    m->clearFaults = false;
-  }
-  return ok;
+  DEBUG("max14912 i2c error\n");
+  return false;
 }
 
 static bool _max14912ReadReg(uint8_t regAddr, struct max14912Str* m,
                              uint8_t* dataA, uint8_t* dataQ) {
   uint8_t data1 = _MAX14912_CMD_READ_REG;
   uint8_t data0 = regAddr;
+  DEBUG("max14912 %d read reg=%d\n", m->pinCs, regAddr);
   if (_max14912SpiTransaction(true, m, &data1, &data0)) {
     m->error = false;
     if (dataA) {
@@ -324,12 +338,15 @@ static bool _max14912ReadReg(uint8_t regAddr, struct max14912Str* m,
 static bool _max14912Cmd(uint8_t cmd, struct max14912Str* m, uint8_t data) {
   uint8_t data1 = cmd;
   uint8_t data0 = data;
+  DEBUG("max14912 %d cmd=%d, data=0x%x\n", m->pinCs, cmd, data);
   return _max14912SpiTransaction(false, m, &data1, &data0);
 }
 
 static bool _max14912Config(struct max14912Str* m, uint8_t cmd,
                             uint8_t checkRegAddr, uint8_t val) {
   uint8_t cfg;
+  DEBUG("max14912 %d cfg cmd=%d chReg=%d val=0x%x\n", m->pinCs, cmd,
+        checkRegAddr, val);
   if (!_max14912Cmd(cmd, m, val)) {
     return false;
   }
@@ -475,17 +492,21 @@ static bool _outputsJoinable(int pin) {
     idxHs2 = base4 + 3;
   }
   if (_pinMode[idxHs1] != IONO_PIN_MODE_OUT_HS) {
+    DEBUG("outs join %d err 1\n", pin);
     return false;
   }
   if (_pinMode[idxHs2] != IONO_PIN_MODE_OUT_HS) {
+    DEBUG("outs join %d err 2\n", pin);
     return false;
   }
   if (_pinMode[idxHsOrIn1] != IONO_PIN_MODE_OUT_HS &&
       _pinMode[idxHsOrIn1] != IONO_PIN_MODE_IN) {
+    DEBUG("outs join %d err 3\n", pin);
     return false;
   }
   if (_pinMode[idxHsOrIn2] != IONO_PIN_MODE_OUT_HS &&
       _pinMode[idxHsOrIn2] != IONO_PIN_MODE_IN) {
+    DEBUG("outs join %d err 4\n", pin);
     return false;
   }
   return true;
@@ -556,6 +577,8 @@ static void _ledCtrl(bool on) {
 // Public ==========================
 
 bool iono_init() {
+  bool ok;
+
   gpio_init(IONO_PIN_CS_DOL);
   gpio_init(IONO_PIN_CS_DOH);
   gpio_init(IONO_PIN_CS_DIL);
@@ -600,8 +623,10 @@ bool iono_init() {
 
   mutex_init(&_spiMtx);
 
-  _max22190WriteReg(MAX22190_REG_FAULT2EN, &_max22190[_MAX22190_IDX_L], 0x3f);
-  _max22190WriteReg(MAX22190_REG_FAULT2EN, &_max22190[_MAX22190_IDX_H], 0x3f);
+  ok = _max22190WriteReg(MAX22190_REG_FAULT2EN, &_max22190[_MAX22190_IDX_L],
+                         0x3f);
+  ok &= _max22190WriteReg(MAX22190_REG_FAULT2EN, &_max22190[_MAX22190_IDX_H],
+                          0x3f);
 
   _ledSet = true;
   _ledVal = false;
@@ -610,10 +635,10 @@ bool iono_init() {
 
   iono_process();
 
-  return true;
+  return ok;
 }
 
-bool iono_ready() { return _setupDone; }
+bool iono_is_ready() { return _setupDone; }
 
 void iono_process() {
   int i, j;
@@ -734,10 +759,12 @@ bool iono_set_pin_mode(int pin, int mode, bool wbol) {
 
   if (pin >= DT1 && pin <= DT4) {
     if (mode == IONO_PIN_MODE_IN) {
+      gpio_init(pin);
       gpio_set_dir(pin, GPIO_IN);
       return true;
     }
     if (mode == IONO_PIN_MODE_OUT) {
+      gpio_init(pin);
       gpio_set_dir(pin, GPIO_OUT);
       return true;
     }
