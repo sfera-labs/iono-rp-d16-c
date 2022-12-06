@@ -15,13 +15,11 @@
 
 #include "iono_rp_d16.h"
 
-#include <hardware/gpio.h>
-#include <hardware/spi.h>
-#include <pico/mutex.h>
-#include <pico/stdlib.h>
-#include <pico/time.h>
-
-#define IONO_DEBUG 1  // TODO remove
+#include "hardware/gpio.h"
+#include "hardware/spi.h"
+#include "pico/mutex.h"
+#include "pico/stdlib.h"
+#include "pico/time.h"
 
 #if defined(IONO_DEBUG)
 #include <stdio.h>
