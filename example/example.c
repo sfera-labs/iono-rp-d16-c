@@ -120,6 +120,7 @@ int main() {
   // Init RS-485 interface
   uart_init(IONO_RS485, 115200);
   uart_set_format(IONO_RS485, 8, 1, UART_PARITY_NONE);
+  iono_rs485_tx_en(false);
 
   while (true) {
     sleep_ms(500);
@@ -155,6 +156,18 @@ int main() {
 
     printf("DT1 = %d\n", iono_get(DT1));
     printf("DT2 = %d\n", iono_get(DT2));
+
+    // Check RS-485 for incoming data
+    while (uart_is_readable(IONO_RS485)) {
+      uint8_t ch = uart_getc(IONO_RS485);
+      if (ch == '\n') {
+        // On a new line send "OK" back,
+        // driving the TX-enble line
+        iono_rs485_tx_en(true);
+        uart_puts(IONO_RS485, "OK\n");
+        iono_rs485_tx_en(false);
+      }
+    }
   }
 
   return 0;

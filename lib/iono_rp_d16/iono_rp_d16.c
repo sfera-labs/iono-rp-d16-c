@@ -146,6 +146,7 @@ static void _spiTransaction(int cs, uint8_t d2, uint8_t d1, uint8_t d0,
                             uint8_t* r2, uint8_t* r1, uint8_t* r0) {
   DEBUG(">>> %d: %x %x %x\n", cs, d2, d1, d0);
   gpio_put(cs, 0);
+  sleep_us(1);
   spi_write_read_blocking(spi0, &d2, r2, 1);
   spi_write_read_blocking(spi0, &d1, r1, 1);
   spi_write_read_blocking(spi0, &d0, r0, 1);
