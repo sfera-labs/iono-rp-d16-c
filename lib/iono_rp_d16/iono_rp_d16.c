@@ -668,9 +668,9 @@ void iono_process() {
           mi->faultMemAlrmT1 |= _getBit(mi->fault1, 3) ? 0xff : 0x00;
           mi->faultMemAlrmT2 |= _getBit(mi->fault1, 4) ? 0xff : 0x00;
         }
-        if (_getBit(mi->fault1, 5)) {
-          for (i = 0; i < _MAX22190_NUM; i++) {
-            mi = &_max22190[i];
+        for (i = 0; i < _MAX22190_NUM; i++) {
+          mi = &_max22190[i];
+          if (_getBit(mi->fault1, 5)) {
             _max22190ReadReg(MAX22190_REG_FAULT2, mi, &mi->fault2);
             mi->faultMemOtshdn |= _getBit(mi->fault2, 4) ? 0xff : 0x00;
           }
