@@ -1002,7 +1002,7 @@ bool iono_set_pwm(int pin, int freqHz, uint16_t dutyU16) {
     _writeOutputProtected(pin, 0);
     return true;
   }
-  _pwm[pin - 1].dutyUs = 1000000ull * dutyU16 / 65535ull;
+  _pwm[pin - 1].dutyUs = (1000000ull / freqHz) * dutyU16 / 65535ull;
   _writeOutputProtected(pin, 1);
   _pwm[pin - 1].startTs = _micros();
   _pwm[pin - 1].on = true;
